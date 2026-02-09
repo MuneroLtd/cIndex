@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.cindex/
+*.db
+*.db-wal
+*.db-shm
+.env
+coverage/
