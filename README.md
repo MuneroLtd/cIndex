@@ -97,6 +97,28 @@ Workflow — do this at the start of every session:
 | **C++** | `.cpp`, `.cc`, `.hpp`, etc. | #include, classes, namespaces, methods |
 | **C#** | `.cs` | using, namespaces, classes, interfaces, enums, methods |
 
+## Graph Visualizer
+
+cindex includes an interactive graph visualizer that renders your codebase as a D3.js force-directed graph in the browser.
+
+```bash
+# If installed globally (npm install -g @munero/cindex)
+cindex-visualize
+
+# Or with npx
+npx -y -p @munero/cindex cindex-visualize
+
+# Specify a repo path
+cindex-visualize /path/to/repo
+
+# Generate without opening browser
+cindex-visualize --no-open
+```
+
+The visualizer shows files (blue), classes (orange), interfaces (purple), and enums (green) with import, extends, and implements relationships. Features include search, zoom/pan, node pinning, and type filtering.
+
+The repo must be indexed first (`repo_index` via MCP, or index it in a session).
+
 ## How it works
 
 1. **Walk** — Discovers files respecting `.gitignore`
