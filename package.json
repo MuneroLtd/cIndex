@@ -1,7 +1,7 @@
 {
   "name": "cindex",
   "version": "0.1.0",
-  "description": "Offline MCP codebase graph indexer for Claude Code — indexes TS/JS codebases into dependency/symbol graphs and serves context bundles",
+  "description": "Offline MCP codebase graph indexer for Claude Code — indexes codebases into dependency/symbol graphs and serves context bundles",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
@@ -40,6 +40,14 @@
     "csharp"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MuneroLtd/cIndex.git"
+  },
+  "homepage": "https://github.com/MuneroLtd/cIndex#readme",
+  "bugs": {
+    "url": "https://github.com/MuneroLtd/cIndex/issues"
+  },
   "engines": {
     "node": ">=20"
   },
