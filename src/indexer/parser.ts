@@ -101,6 +101,22 @@ function emptyResult(): ParseResult {
 }
 
 // ---------------------------------------------------------------------------
+// tree-sitter 0.21.x workaround: string input fails at >= 32768 bytes due to
+// a signed 16-bit overflow in the native binding. The callback form of
+// parser.parse() does not have this limit.
+// ---------------------------------------------------------------------------
+
+const TREE_SITTER_STRING_LIMIT = 32768;
+
+function treeSitterParse(parser: Parser, source: string): Parser.Tree {
+  if (source.length < TREE_SITTER_STRING_LIMIT) {
+    return parser.parse(source);
+  }
+  // Use callback form for large files
+  return parser.parse((index: number) => source.slice(index, index + 4096));
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -118,7 +134,7 @@ export function parseFile(
 ): ParseResult {
   try {
     const parser = parserForFile(filePath, lang);
-    const tree = parser.parse(source);
+    const tree = treeSitterParse(parser, source);
 
     if (!tree || !tree.rootNode) {
       console.error(`[cindex] tree-sitter returned empty tree for ${filePath}`);
