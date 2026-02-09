@@ -17,26 +17,6 @@ import { repoSnippet } from './tools/repo-snippet.js';
 import { repoContextGet } from './tools/repo-context-get.js';
 
 // ---------------------------------------------------------------------------
-// Database initialization
-// ---------------------------------------------------------------------------
-
-const dbPath = process.env.CINDEX_DB_PATH || join(homedir(), '.cindex', 'cindex.db');
-
-// Ensure the parent directory exists
-mkdirSync(dirname(dbPath), { recursive: true });
-
-const db = new Database(dbPath);
-
-// ---------------------------------------------------------------------------
-// MCP Server
-// ---------------------------------------------------------------------------
-
-const server = new Server(
-  { name: 'cindex', version: '0.1.0' },
-  { capabilities: { tools: {} } },
-);
-
-// ---------------------------------------------------------------------------
 // Tool definitions
 // ---------------------------------------------------------------------------
 
@@ -177,129 +157,130 @@ const TOOL_DEFINITIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Handler: list tools
+// startServer — exported for cli.ts
 // ---------------------------------------------------------------------------
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOL_DEFINITIONS };
-});
+export async function startServer(): Promise<void> {
+  const dbPath = process.env.CINDEX_DB_PATH || join(homedir(), '.cindex', 'cindex.db');
 
-// ---------------------------------------------------------------------------
-// Handler: call tool
-// ---------------------------------------------------------------------------
+  // Ensure the parent directory exists
+  mkdirSync(dirname(dbPath), { recursive: true });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  const db = new Database(dbPath);
 
-  try {
-    let result: unknown;
+  const server = new Server(
+    { name: 'cindex', version: '0.1.0' },
+    { capabilities: { tools: {} } },
+  );
 
-    switch (name) {
-      case 'repo_status': {
-        const { repo_path } = args as { repo_path: string };
-        result = await repoStatus(db, repo_path);
-        break;
+  // Handler: list tools
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return { tools: TOOL_DEFINITIONS };
+  });
+
+  // Handler: call tool
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      let result: unknown;
+
+      switch (name) {
+        case 'repo_status': {
+          const { repo_path } = args as { repo_path: string };
+          result = await repoStatus(db, repo_path);
+          break;
+        }
+
+        case 'repo_index': {
+          const { repo_path, mode, level } = args as {
+            repo_path: string;
+            mode?: string;
+            level?: number;
+          };
+          result = await repoIndex(db, repo_path, mode, level);
+          break;
+        }
+
+        case 'repo_search': {
+          const { repo_path, query, limit } = args as {
+            repo_path: string;
+            query: string;
+            limit?: number;
+          };
+          result = await repoSearch(db, repo_path, query, limit);
+          break;
+        }
+
+        case 'repo_snippet': {
+          const { repo_path, file_path, start_line, end_line } = args as {
+            repo_path: string;
+            file_path: string;
+            start_line?: number;
+            end_line?: number;
+          };
+          result = await repoSnippet(db, repo_path, file_path, start_line, end_line);
+          break;
+        }
+
+        case 'repo_context_get': {
+          const { repo_path, task, budget, hints } = args as {
+            repo_path: string;
+            task: string;
+            budget?: number;
+            hints?: { paths?: string[]; symbols?: string[]; lang?: string };
+          };
+          result = await repoContextGet(db, repo_path, task, budget, hints);
+          break;
+        }
+
+        default:
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ error: `Unknown tool: ${name}` }),
+              },
+            ],
+            isError: true,
+          };
       }
 
-      case 'repo_index': {
-        const { repo_path, mode, level } = args as {
-          repo_path: string;
-          mode?: string;
-          level?: number;
-        };
-        result = await repoIndex(db, repo_path, mode, level);
-        break;
-      }
-
-      case 'repo_search': {
-        const { repo_path, query, limit } = args as {
-          repo_path: string;
-          query: string;
-          limit?: number;
-        };
-        result = await repoSearch(db, repo_path, query, limit);
-        break;
-      }
-
-      case 'repo_snippet': {
-        const { repo_path, file_path, start_line, end_line } = args as {
-          repo_path: string;
-          file_path: string;
-          start_line?: number;
-          end_line?: number;
-        };
-        result = await repoSnippet(db, repo_path, file_path, start_line, end_line);
-        break;
-      }
-
-      case 'repo_context_get': {
-        const { repo_path, task, budget, hints } = args as {
-          repo_path: string;
-          task: string;
-          budget?: number;
-          hints?: { paths?: string[]; symbols?: string[]; lang?: string };
-        };
-        result = await repoContextGet(db, repo_path, task, budget, hints);
-        break;
-      }
-
-      default:
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({ error: `Unknown tool: ${name}` }),
-            },
-          ],
-          isError: true,
-        };
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ error: message }),
+          },
+        ],
+        isError: true,
+      };
     }
+  });
 
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify({ error: message }),
-        },
-      ],
-      isError: true,
-    };
+  // Shutdown handler
+  function shutdown(): void {
+    try {
+      db.close();
+    } catch {
+      // Ignore close errors during shutdown
+    }
+    process.exit(0);
   }
-});
 
-// ---------------------------------------------------------------------------
-// Startup and shutdown
-// ---------------------------------------------------------------------------
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 
-async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-
-function shutdown(): void {
-  try {
-    db.close();
-  } catch {
-    // Ignore close errors during shutdown
-  }
-  process.exit(0);
-}
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  db.close();
-  process.exit(1);
-});

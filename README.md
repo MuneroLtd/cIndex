@@ -97,27 +97,47 @@ Workflow — do this at the start of every session:
 | **C++** | `.cpp`, `.cc`, `.hpp`, etc. | #include, classes, namespaces, methods |
 | **C#** | `.cs` | using, namespaces, classes, interfaces, enums, methods |
 
+## CLI
+
+cindex includes a CLI for terminal use alongside its MCP server mode.
+
+```bash
+# Check index status
+cindex status
+cindex status /path/to/repo
+
+# Index a repository
+cindex index                      # auto-detect mode (full or incremental)
+cindex index --full               # force full re-index
+cindex index /path/to/repo        # index a specific repo
+
+# Visualize the dependency graph
+cindex visualize                  # generate and open in browser
+cindex visualize --no-open        # generate without opening
+cindex visualize /path/to/repo
+
+# Start MCP server (default, used by editors)
+cindex
+
+# Help
+cindex help
+```
+
+Running `cindex` with no arguments starts the MCP server on stdio — this is backwards-compatible with existing editor configurations.
+
 ## Graph Visualizer
 
 cindex includes an interactive graph visualizer that renders your codebase as a D3.js force-directed graph in the browser.
 
 ```bash
-# If installed globally (npm install -g @munero/cindex)
-cindex-visualize
-
-# Or with npx
-npx -y -p @munero/cindex cindex-visualize
-
-# Specify a repo path
-cindex-visualize /path/to/repo
-
-# Generate without opening browser
-cindex-visualize --no-open
+cindex visualize
+cindex visualize /path/to/repo
+cindex visualize --no-open
 ```
 
 The visualizer shows files (blue), classes (orange), interfaces (purple), and enums (green) with import, extends, and implements relationships. Features include search, zoom/pan, node pinning, and type filtering.
 
-The repo must be indexed first (`repo_index` via MCP, or index it in a session).
+The repo must be indexed first (`cindex index` or `repo_index` via MCP).
 
 ## How it works
 

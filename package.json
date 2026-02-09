@@ -1,12 +1,11 @@
 {
   "name": "@munero/cindex",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Offline MCP codebase graph indexer for Claude Code — indexes codebases into dependency/symbol graphs and serves context bundles",
   "type": "module",
-  "main": "dist/server.js",
+  "main": "dist/cli.js",
   "bin": {
-    "cindex": "dist/server.js",
-    "cindex-visualize": "dist/visualizer.js"
+    "cindex": "dist/cli.js"
   },
   "files": [
     "dist",

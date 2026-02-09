@@ -4,10 +4,6 @@
  * Generates a self-contained HTML file with an interactive D3.js
  * force-directed graph of the indexed codebase, then opens it
  * in the default browser.
- *
- * Usage:
- *   tsx src/visualizer.ts [repo-path] [--no-open]
- *   npm run visualize -- [repo-path] [--no-open]
  */
 
 import { Database } from './storage/database.js';
@@ -15,7 +11,7 @@ import { RepoRepository, FileRepository, SymbolRepository, EdgeRepository } from
 import { resolve, join, basename, dirname } from 'node:path';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { platform } from 'node:os';
+import { homedir, platform } from 'node:os';
 import type { FileRecord, SymbolRecord, EdgeRecord, EdgeRel, SymbolKind } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -56,246 +52,243 @@ interface GraphData {
   repoPath: string;
 }
 
-// ---------------------------------------------------------------------------
-// CLI argument parsing
-// ---------------------------------------------------------------------------
-
-const args = process.argv.slice(2);
-const noOpen = args.includes('--no-open');
-const filteredArgs = args.filter((a) => a !== '--no-open');
-const repoPath = resolve(filteredArgs[0] ?? process.cwd());
-
-// ---------------------------------------------------------------------------
-// Database setup
-// ---------------------------------------------------------------------------
-
-// Try local .cindex/cindex.db first, then global ~/.cindex/cindex.db
-import { homedir } from 'node:os';
-
-const localDb = join(repoPath, '.cindex', 'cindex.db');
-const globalDb = process.env.CINDEX_DB_PATH || join(homedir(), '.cindex', 'cindex.db');
-const dbPath = existsSync(localDb) ? localDb : globalDb;
-const cindexDir = join(repoPath, '.cindex');
-
-if (!existsSync(dbPath)) {
-  console.error(`No cindex database found at ${localDb} or ${globalDb}`);
-  console.error(`Run repo_index to index this repository first.`);
-  process.exit(1);
+export interface VisualizeOptions {
+  noOpen?: boolean;
 }
 
-const database = new Database(dbPath);
-const repos = new RepoRepository(database);
-const files = new FileRepository(database);
-const edges = new EdgeRepository(database);
-
-// We need raw queries for symbols (all at once by repo_id)
-const db = database.db;
-
 // ---------------------------------------------------------------------------
-// Query the repo
+// runVisualize — exported for cli.ts
 // ---------------------------------------------------------------------------
 
-const repo = repos.findByPath(repoPath);
-if (!repo) {
-  console.error(`Repository not found for path: ${repoPath}`);
-  console.error(`Run "cindex" to index this repository first.`);
-  database.close();
-  process.exit(1);
-}
+export function runVisualize(repoPathArg?: string, options: VisualizeOptions = {}): void {
+  const repoPath = resolve(repoPathArg ?? process.cwd());
 
-const repoId = repo.id;
+  // Try local .cindex/cindex.db first, then global ~/.cindex/cindex.db
+  const localDb = join(repoPath, '.cindex', 'cindex.db');
+  const globalDb = process.env.CINDEX_DB_PATH || join(homedir(), '.cindex', 'cindex.db');
+  const dbPath = existsSync(localDb) ? localDb : globalDb;
+  const cindexDir = join(repoPath, '.cindex');
 
-console.log(`Building graph for: ${repoPath}`);
-
-// Get all files
-const allFiles: FileRecord[] = files.findByRepoId(repoId);
-
-// Get all symbols via raw query
-const allSymbols: SymbolRecord[] = db
-  .prepare('SELECT * FROM symbols WHERE repo_id = ?')
-  .all(repoId) as SymbolRecord[];
-
-// Get all edges via raw query
-const allEdges: EdgeRecord[] = db
-  .prepare('SELECT * FROM edges WHERE repo_id = ?')
-  .all(repoId) as EdgeRecord[];
-
-console.log(`  Files: ${allFiles.length}`);
-console.log(`  Symbols: ${allSymbols.length}`);
-console.log(`  Edges: ${allEdges.length}`);
-
-// ---------------------------------------------------------------------------
-// Build the graph data
-// ---------------------------------------------------------------------------
-
-// Build lookup maps
-const fileMap = new Map<number, FileRecord>();
-for (const f of allFiles) {
-  fileMap.set(f.id, f);
-}
-
-const symbolMap = new Map<number, SymbolRecord>();
-for (const s of allSymbols) {
-  symbolMap.set(s.id, s);
-}
-
-// Filter symbols to only class, interface, enum
-const includedSymbolKinds = new Set<SymbolKind>(['class', 'interface', 'enum']);
-const includedSymbols = allSymbols.filter((s) => includedSymbolKinds.has(s.kind as SymbolKind));
-const includedSymbolIds = new Set(includedSymbols.map((s) => s.id));
-
-// Build node ID sets for quick membership checks
-const fileNodeIds = new Set(allFiles.map((f) => `file:${f.id}`));
-const symbolNodeIds = new Set(includedSymbols.map((s) => `symbol:${s.id}`));
-
-// Filter edges: only IMPORTS between files, EXTENDS and IMPLEMENTS between symbols
-const includedEdgeRels = new Set<EdgeRel>(['IMPORTS', 'EXTENDS', 'IMPLEMENTS']);
-const filteredEdges = allEdges.filter((e) => {
-  if (!includedEdgeRels.has(e.rel as EdgeRel)) return false;
-
-  if (e.rel === 'IMPORTS') {
-    // Only file-to-file imports
-    return e.src_type === 'file' && e.dst_type === 'file';
+  if (!existsSync(dbPath)) {
+    console.error(`No cindex database found at ${localDb} or ${globalDb}`);
+    console.error(`Run "cindex index" to index this repository first.`);
+    process.exit(1);
   }
 
-  if (e.rel === 'EXTENDS' || e.rel === 'IMPLEMENTS') {
-    // Only between included symbols
-    if (e.src_type === 'symbol' && e.dst_type === 'symbol') {
-      return includedSymbolIds.has(e.src_id) && includedSymbolIds.has(e.dst_id);
+  const database = new Database(dbPath);
+  const repos = new RepoRepository(database);
+  const files = new FileRepository(database);
+  const edges = new EdgeRepository(database);
+
+  // We need raw queries for symbols (all at once by repo_id)
+  const db = database.db;
+
+  // ---------------------------------------------------------------------------
+  // Query the repo
+  // ---------------------------------------------------------------------------
+
+  const repo = repos.findByPath(repoPath);
+  if (!repo) {
+    console.error(`Repository not found for path: ${repoPath}`);
+    console.error(`Run "cindex index" to index this repository first.`);
+    database.close();
+    process.exit(1);
+  }
+
+  const repoId = repo.id;
+
+  console.log(`Building graph for: ${repoPath}`);
+
+  // Get all files
+  const allFiles: FileRecord[] = files.findByRepoId(repoId);
+
+  // Get all symbols via raw query
+  const allSymbols: SymbolRecord[] = db
+    .prepare('SELECT * FROM symbols WHERE repo_id = ?')
+    .all(repoId) as SymbolRecord[];
+
+  // Get all edges via raw query
+  const allEdges: EdgeRecord[] = db
+    .prepare('SELECT * FROM edges WHERE repo_id = ?')
+    .all(repoId) as EdgeRecord[];
+
+  console.log(`  Files: ${allFiles.length}`);
+  console.log(`  Symbols: ${allSymbols.length}`);
+  console.log(`  Edges: ${allEdges.length}`);
+
+  // ---------------------------------------------------------------------------
+  // Build the graph data
+  // ---------------------------------------------------------------------------
+
+  // Build lookup maps
+  const fileMap = new Map<number, FileRecord>();
+  for (const f of allFiles) {
+    fileMap.set(f.id, f);
+  }
+
+  const symbolMap = new Map<number, SymbolRecord>();
+  for (const s of allSymbols) {
+    symbolMap.set(s.id, s);
+  }
+
+  // Filter symbols to only class, interface, enum
+  const includedSymbolKinds = new Set<SymbolKind>(['class', 'interface', 'enum']);
+  const includedSymbols = allSymbols.filter((s) => includedSymbolKinds.has(s.kind as SymbolKind));
+  const includedSymbolIds = new Set(includedSymbols.map((s) => s.id));
+
+  // Build node ID sets for quick membership checks
+  const fileNodeIds = new Set(allFiles.map((f) => `file:${f.id}`));
+  const symbolNodeIds = new Set(includedSymbols.map((s) => `symbol:${s.id}`));
+
+  // Filter edges: only IMPORTS between files, EXTENDS and IMPLEMENTS between symbols
+  const includedEdgeRels = new Set<EdgeRel>(['IMPORTS', 'EXTENDS', 'IMPLEMENTS']);
+  const filteredEdges = allEdges.filter((e) => {
+    if (!includedEdgeRels.has(e.rel as EdgeRel)) return false;
+
+    if (e.rel === 'IMPORTS') {
+      // Only file-to-file imports
+      return e.src_type === 'file' && e.dst_type === 'file';
     }
+
+    if (e.rel === 'EXTENDS' || e.rel === 'IMPLEMENTS') {
+      // Only between included symbols
+      if (e.src_type === 'symbol' && e.dst_type === 'symbol') {
+        return includedSymbolIds.has(e.src_id) && includedSymbolIds.has(e.dst_id);
+      }
+      return false;
+    }
+
     return false;
+  });
+
+  // Count connections per node
+  const connectionCount = new Map<string, number>();
+  for (const e of filteredEdges) {
+    const srcKey =
+      e.src_type === 'file' ? `file:${e.src_id}` : `symbol:${e.src_id}`;
+    const dstKey =
+      e.dst_type === 'file' ? `file:${e.dst_id}` : `symbol:${e.dst_id}`;
+    connectionCount.set(srcKey, (connectionCount.get(srcKey) ?? 0) + 1);
+    connectionCount.set(dstKey, (connectionCount.get(dstKey) ?? 0) + 1);
   }
 
-  return false;
-});
+  // Helper: short label for a file (last 2 path segments)
+  function shortPath(fullPath: string): string {
+    const parts = fullPath.split('/');
+    if (parts.length <= 2) return fullPath;
+    return parts.slice(-2).join('/');
+  }
 
-// Count connections per node
-const connectionCount = new Map<string, number>();
-for (const e of filteredEdges) {
-  const srcKey =
-    e.src_type === 'file' ? `file:${e.src_id}` : `symbol:${e.src_id}`;
-  const dstKey =
-    e.dst_type === 'file' ? `file:${e.dst_id}` : `symbol:${e.dst_id}`;
-  connectionCount.set(srcKey, (connectionCount.get(srcKey) ?? 0) + 1);
-  connectionCount.set(dstKey, (connectionCount.get(dstKey) ?? 0) + 1);
-}
+  // Build nodes
+  const nodes: GraphNode[] = [];
 
-// Helper: short label for a file (last 2 path segments)
-function shortPath(fullPath: string): string {
-  const parts = fullPath.split('/');
-  if (parts.length <= 2) return fullPath;
-  return parts.slice(-2).join('/');
-}
+  // Only include files that have at least one connection
+  const connectedFileIds = new Set<number>();
+  for (const e of filteredEdges) {
+    if (e.src_type === 'file') connectedFileIds.add(e.src_id);
+    if (e.dst_type === 'file') connectedFileIds.add(e.dst_id);
+  }
 
-// Build nodes
-const nodes: GraphNode[] = [];
+  for (const f of allFiles) {
+    if (!connectedFileIds.has(f.id)) continue;
+    const nodeId = `file:${f.id}`;
+    nodes.push({
+      id: nodeId,
+      label: shortPath(f.path),
+      group: 'file',
+      fullPath: f.path,
+      lang: f.lang,
+      sizeBytes: f.size_bytes,
+      connections: connectionCount.get(nodeId) ?? 0,
+    });
+  }
 
-// Only include files that have at least one connection
-const connectedFileIds = new Set<number>();
-for (const e of filteredEdges) {
-  if (e.src_type === 'file') connectedFileIds.add(e.src_id);
-  if (e.dst_type === 'file') connectedFileIds.add(e.dst_id);
-}
+  // Only include symbols that have at least one connection or are in included kinds
+  const connectedSymbolIds = new Set<number>();
+  for (const e of filteredEdges) {
+    if (e.src_type === 'symbol') connectedSymbolIds.add(e.src_id);
+    if (e.dst_type === 'symbol') connectedSymbolIds.add(e.dst_id);
+  }
 
-for (const f of allFiles) {
-  if (!connectedFileIds.has(f.id)) continue;
-  const nodeId = `file:${f.id}`;
-  nodes.push({
-    id: nodeId,
-    label: shortPath(f.path),
-    group: 'file',
-    fullPath: f.path,
-    lang: f.lang,
-    sizeBytes: f.size_bytes,
-    connections: connectionCount.get(nodeId) ?? 0,
-  });
-}
+  for (const s of includedSymbols) {
+    const nodeId = `symbol:${s.id}`;
+    const file = fileMap.get(s.file_id);
+    nodes.push({
+      id: nodeId,
+      label: s.name,
+      group: s.kind as 'class' | 'interface' | 'enum',
+      kind: s.kind,
+      fullPath: s.fq_name,
+      filePath: file?.path,
+      startLine: s.start_line,
+      endLine: s.end_line,
+      connections: connectionCount.get(nodeId) ?? 0,
+    });
+  }
 
-// Only include symbols that have at least one connection or are in included kinds
-const connectedSymbolIds = new Set<number>();
-for (const e of filteredEdges) {
-  if (e.src_type === 'symbol') connectedSymbolIds.add(e.src_id);
-  if (e.dst_type === 'symbol') connectedSymbolIds.add(e.dst_id);
-}
+  // Build links
+  const links: GraphLink[] = filteredEdges.map((e) => ({
+    source: `${e.src_type}:${e.src_id}`,
+    target: `${e.dst_type}:${e.dst_id}`,
+    rel: e.rel as EdgeRel,
+  }));
 
-for (const s of includedSymbols) {
-  const nodeId = `symbol:${s.id}`;
-  const file = fileMap.get(s.file_id);
-  nodes.push({
-    id: nodeId,
-    label: s.name,
-    group: s.kind as 'class' | 'interface' | 'enum',
-    kind: s.kind,
-    fullPath: s.fq_name,
-    filePath: file?.path,
-    startLine: s.start_line,
-    endLine: s.end_line,
-    connections: connectionCount.get(nodeId) ?? 0,
-  });
-}
+  // Only keep links where both source and target exist in nodes
+  const nodeIdSet = new Set(nodes.map((n) => n.id));
+  const validLinks = links.filter(
+    (l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target),
+  );
 
-// Build links
-const links: GraphLink[] = filteredEdges.map((e) => ({
-  source: `${e.src_type}:${e.src_id}`,
-  target: `${e.dst_type}:${e.dst_id}`,
-  rel: e.rel as EdgeRel,
-}));
+  const classCount = includedSymbols.filter((s) => s.kind === 'class').length;
+  const interfaceCount = includedSymbols.filter((s) => s.kind === 'interface').length;
+  const enumCount = includedSymbols.filter((s) => s.kind === 'enum').length;
 
-// Only keep links where both source and target exist in nodes
-const nodeIdSet = new Set(nodes.map((n) => n.id));
-const validLinks = links.filter(
-  (l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target),
-);
+  const graphData: GraphData = {
+    nodes,
+    links: validLinks,
+    stats: {
+      files: allFiles.length,
+      symbols: allSymbols.length,
+      edges: allEdges.length,
+      classes: classCount,
+      interfaces: interfaceCount,
+      enums: enumCount,
+    },
+    repoPath,
+  };
 
-const classCount = includedSymbols.filter((s) => s.kind === 'class').length;
-const interfaceCount = includedSymbols.filter((s) => s.kind === 'interface').length;
-const enumCount = includedSymbols.filter((s) => s.kind === 'enum').length;
+  console.log(`  Graph nodes: ${nodes.length}`);
+  console.log(`  Graph links: ${validLinks.length}`);
 
-const graphData: GraphData = {
-  nodes,
-  links: validLinks,
-  stats: {
-    files: allFiles.length,
-    symbols: allSymbols.length,
-    edges: allEdges.length,
-    classes: classCount,
-    interfaces: interfaceCount,
-    enums: enumCount,
-  },
-  repoPath,
-};
+  // ---------------------------------------------------------------------------
+  // Generate HTML
+  // ---------------------------------------------------------------------------
 
-console.log(`  Graph nodes: ${nodes.length}`);
-console.log(`  Graph links: ${validLinks.length}`);
+  const htmlContent = generateHTML(graphData);
 
-// ---------------------------------------------------------------------------
-// Generate HTML
-// ---------------------------------------------------------------------------
+  // Write to .cindex/graph.html
+  mkdirSync(cindexDir, { recursive: true });
+  const outputPath = join(cindexDir, 'graph.html');
+  writeFileSync(outputPath, htmlContent, 'utf-8');
+  console.log(`\nGraph written to: ${outputPath}`);
 
-const htmlContent = generateHTML(graphData);
+  // Close database
+  database.close();
 
-// Write to .cindex/graph.html
-mkdirSync(cindexDir, { recursive: true });
-const outputPath = join(cindexDir, 'graph.html');
-writeFileSync(outputPath, htmlContent, 'utf-8');
-console.log(`\nGraph written to: ${outputPath}`);
-
-// Close database
-database.close();
-
-// Open in browser
-if (!noOpen) {
-  try {
-    const cmd =
-      platform() === 'darwin'
-        ? 'open'
-        : platform() === 'win32'
-          ? 'start'
-          : 'xdg-open';
-    execSync(`${cmd} "${outputPath}"`, { stdio: 'ignore' });
-    console.log('Opened in default browser.');
-  } catch {
-    console.log('Could not open browser automatically. Open the file manually.');
+  // Open in browser
+  if (!options.noOpen) {
+    try {
+      const cmd =
+        platform() === 'darwin'
+          ? 'open'
+          : platform() === 'win32'
+            ? 'start'
+            : 'xdg-open';
+      execSync(`${cmd} "${outputPath}"`, { stdio: 'ignore' });
+      console.log('Opened in default browser.');
+    } catch {
+      console.log('Could not open browser automatically. Open the file manually.');
+    }
   }
 }
 
