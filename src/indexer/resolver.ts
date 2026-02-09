@@ -5,12 +5,20 @@ import { resolve, relative, dirname, isAbsolute, normalize } from "node:path";
  * Extensions to try when resolving a relative import that has no extension.
  * Order matters -- earlier entries are preferred.
  */
-const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
+const RESOLVE_EXTENSIONS = [
+  ".ts", ".tsx", ".js", ".jsx",
+  ".py", ".go", ".rs", ".php", ".java", ".rb",
+  ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".cs",
+];
 
 /**
  * Index filenames to try when an import points at a directory.
  */
-const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.jsx"];
+const INDEX_FILES = [
+  "index.ts", "index.tsx", "index.js", "index.jsx",
+  "__init__.py",
+  "mod.rs",
+];
 
 /**
  * Resolve an import path to a repo-relative file path.

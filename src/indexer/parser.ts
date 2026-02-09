@@ -1,10 +1,28 @@
 import Parser from "tree-sitter";
 import TypeScript from "tree-sitter-typescript";
 import JavaScript from "tree-sitter-javascript";
+import Python from "tree-sitter-python";
+import Go from "tree-sitter-go";
+import Rust from "tree-sitter-rust";
+import PHP from "tree-sitter-php";
+import Java from "tree-sitter-java";
+import Ruby from "tree-sitter-ruby";
+import C from "tree-sitter-c";
+import Cpp from "tree-sitter-cpp";
+import CSharp from "tree-sitter-c-sharp";
 import { extname } from "node:path";
 import type { Language, ParseResult } from "../types.js";
 import { parseTypeScript } from "./parsers/typescript.js";
 import { parseJavaScript } from "./parsers/javascript.js";
+import { parsePython } from "./parsers/python.js";
+import { parseGo } from "./parsers/go.js";
+import { parseRust } from "./parsers/rust.js";
+import { parsePHP } from "./parsers/php.js";
+import { parseJava } from "./parsers/java.js";
+import { parseRuby } from "./parsers/ruby.js";
+import { parseC } from "./parsers/c.js";
+import { parseCpp } from "./parsers/cpp.js";
+import { parseCSharp } from "./parsers/csharp.js";
 
 // ---------------------------------------------------------------------------
 // Initialise parsers -- one per grammar variant
@@ -19,13 +37,62 @@ tsxParser.setLanguage(TypeScript.tsx);
 const jsParser = new Parser();
 jsParser.setLanguage(JavaScript);
 
+const pythonParser = new Parser();
+pythonParser.setLanguage(Python);
+
+const goParser = new Parser();
+goParser.setLanguage(Go);
+
+const rustParser = new Parser();
+rustParser.setLanguage(Rust);
+
+const phpParser = new Parser();
+// tree-sitter-php exports { php, php_only } — use php which includes HTML
+phpParser.setLanguage((PHP as any).php ?? PHP);
+
+const javaParser = new Parser();
+javaParser.setLanguage(Java);
+
+const rubyParser = new Parser();
+rubyParser.setLanguage(Ruby);
+
+const cParser = new Parser();
+cParser.setLanguage(C);
+
+const cppParser = new Parser();
+cppParser.setLanguage(Cpp);
+
+const csharpParser = new Parser();
+csharpParser.setLanguage(CSharp);
+
 /** Select the correct tree-sitter Parser instance for a given file. */
 function parserForFile(filePath: string, lang: Language): Parser {
-  if (lang === "typescript") {
-    const ext = extname(filePath).toLowerCase();
-    return ext === ".tsx" ? tsxParser : tsParser;
+  switch (lang) {
+    case "typescript": {
+      const ext = extname(filePath).toLowerCase();
+      return ext === ".tsx" ? tsxParser : tsParser;
+    }
+    case "javascript":
+      return jsParser;
+    case "python":
+      return pythonParser;
+    case "go":
+      return goParser;
+    case "rust":
+      return rustParser;
+    case "php":
+      return phpParser;
+    case "java":
+      return javaParser;
+    case "ruby":
+      return rubyParser;
+    case "c":
+      return cParser;
+    case "cpp":
+      return cppParser;
+    case "csharp":
+      return csharpParser;
   }
-  return jsParser;
 }
 
 /** Return an empty ParseResult (used as fallback on errors). */
@@ -43,12 +110,6 @@ function emptyResult(): ParseResult {
  * Routes to the appropriate language-specific parser based on the `lang`
  * parameter. The tree-sitter grammar is selected by file extension within
  * each language (e.g. `.tsx` uses the TSX grammar).
- *
- * @param source   - The raw source code string.
- * @param filePath - Absolute or relative file path (used for grammar selection
- *                   and error messages).
- * @param lang     - The language identifier for the file.
- * @returns A ParseResult containing all discovered imports, exports, and symbols.
  */
 export function parseFile(
   source: string,
@@ -69,12 +130,24 @@ export function parseFile(
         return parseTypeScript(source, filePath, tree);
       case "javascript":
         return parseJavaScript(source, filePath, tree);
-      default: {
-        // Exhaustive check -- should never happen with the Language type
-        const _exhaustive: never = lang;
-        console.error(`[cindex] Unsupported language: ${_exhaustive}`);
-        return emptyResult();
-      }
+      case "python":
+        return parsePython(source, filePath, tree);
+      case "go":
+        return parseGo(source, filePath, tree);
+      case "rust":
+        return parseRust(source, filePath, tree);
+      case "php":
+        return parsePHP(source, filePath, tree);
+      case "java":
+        return parseJava(source, filePath, tree);
+      case "ruby":
+        return parseRuby(source, filePath, tree);
+      case "c":
+        return parseC(source, filePath, tree);
+      case "cpp":
+        return parseCpp(source, filePath, tree);
+      case "csharp":
+        return parseCSharp(source, filePath, tree);
     }
   } catch (error) {
     const message =

@@ -21,10 +21,25 @@ export type SymbolKind =
   | "enum"
   | "method"
   | "property"
-  | "namespace";
+  | "namespace"
+  | "struct"
+  | "trait"
+  | "module"
+  | "constant";
 
 // Language identifiers
-export type Language = "typescript" | "javascript";
+export type Language =
+  | "typescript"
+  | "javascript"
+  | "python"
+  | "go"
+  | "rust"
+  | "php"
+  | "java"
+  | "ruby"
+  | "c"
+  | "cpp"
+  | "csharp";
 
 // Indexing modes
 export type IndexMode = "full" | "incremental";

@@ -32,6 +32,31 @@ function detectLanguage(filePath: string): Language | null {
     case ".mjs":
     case ".cjs":
       return "javascript";
+    case ".py":
+    case ".pyi":
+      return "python";
+    case ".go":
+      return "go";
+    case ".rs":
+      return "rust";
+    case ".php":
+      return "php";
+    case ".java":
+      return "java";
+    case ".rb":
+      return "ruby";
+    case ".c":
+    case ".h":
+      return "c";
+    case ".cpp":
+    case ".cc":
+    case ".cxx":
+    case ".hpp":
+    case ".hxx":
+    case ".hh":
+      return "cpp";
+    case ".cs":
+      return "csharp";
     default:
       return null;
   }
