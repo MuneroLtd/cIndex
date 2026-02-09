@@ -35,8 +35,8 @@ export function sanitizeFtsQuery(query: string): string {
     return '';
   }
 
-  // Wrap each term in double-quotes for literal matching
-  return terms.map(t => `"${t}"`).join(' ');
+  // Wrap each term in double-quotes for literal matching, join with OR
+  return terms.map(t => `"${t}"`).join(' OR ');
 }
 
 /**
