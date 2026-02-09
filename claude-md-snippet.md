@@ -10,3 +10,9 @@ This project is indexed with cindex (MCP codebase graph indexer).
 5. Use `repo_snippet` to read full source of files identified by search or context
 
 This gives you a map of the codebase's dependency graph so you can make targeted, informed changes instead of reading files blindly.
+
+---
+
+Add the above snippet to:
+- `CLAUDE.md` for Claude Code
+- `.cursorrules` for Cursor
