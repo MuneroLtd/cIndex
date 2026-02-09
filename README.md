@@ -5,7 +5,7 @@ Offline MCP codebase graph indexer for [Claude Code](https://docs.anthropic.com/
 ## Install
 
 ```bash
-npm install -g cindex
+npm install -g @munero/cindex
 ```
 
 Then add to Claude Code:
@@ -17,7 +17,7 @@ claude mcp add -s user cindex -- cindex
 Or use npx (no global install):
 
 ```bash
-claude mcp add -s user cindex -- npx -y cindex
+claude mcp add -s user cindex -- npx -y @munero/cindex
 ```
 
 ## What it does
